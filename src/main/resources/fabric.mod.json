@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "id": "pvpclub_easyinv",
+  "version": "${version}",
+  "name": "PVP Club Easy Invite",
+  "description": "Click any player name in chat to automatically send /p invite <name>. Built for mcpvp.club. Supports Mod Menu config screen.",
+  "authors": [
+    "pvpclub-easyinv contributors"
+  ],
+  "contact": {
+    "homepage": "https://mcpvp.club"
+  },
+  "license": "MIT",
+  "icon": "assets/pvpclub_easyinv/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "com.pvpclub.easyinv.PvpClubEasyInv"
+    ],
+    "modmenu": [
+      "com.pvpclub.easyinv.integration.ModMenuIntegration"
+    ]
+  },
+  "mixins": [
+    "pvpclub_easyinv.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "minecraft": ">=${minecraft_version}",
+    "java": ">=21",
+    "fabric-api": "*"
+  },
+  "suggests": {
+    "modmenu": ">=10.0.0"
+  }
+}
