@@ -1,24 +1,25 @@
 package com.pvpclub.easyinv.gui;
 
 import com.pvpclub.easyinv.config.ModConfig;
-import com.pvpclub.easyinv.config.ModifierKey;
-import net.minecraft.client.gui.Click;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.TextFieldWidget;
-import net.minecraft.client.input.KeyInput;
 import net.minecraft.text.Text;
-import org.lwjgl.glfw.GLFW;
 
 /**
  * Vanilla-styled config screen for the mod. Wired into ModMenu via
  * {@link com.pvpclub.easyinv.integration.ModMenuIntegration}; also
  * accessible directly from code if a future keybind wants to open it.
  *
- * <p>The "Modifier Key" row uses the same "press to bind" pattern as
- * Minecraft's vanilla controls screen: clicking the button arms the
- * screen, the next key/mouse button press becomes the new binding,
- * and pressing {@code Esc} cancels.</p>
+ * <p>The "Build chat pattern from recent chat…" button opens
+ * {@link ChatHistoryPickerScreen}, the entry point for the
+ * click-to-build-pattern wizard. Two fields are exposed at the top
+ * so the wizard can pre-fill them and the user can hand-tweak the
+ * result before pressing Save.</p>
+ *
+ * <p><b>v1.3.0:</b> removed the Require Modifier Key toggle and the
+ * Modifier Key binding — clicks always fire on chat lines when the
+ * mod is enabled and the player is on the configured server.</p>
  */
 public class ConfigScreen extends Screen {
 
@@ -31,17 +32,11 @@ public class ConfigScreen extends Screen {
 
     private TextFieldWidget addressField;
     private TextFieldWidget patternField;
+    private TextFieldWidget commandField;
     private ButtonWidget enabledButton;
     private ButtonWidget serverOnlyButton;
     private ButtonWidget autoPatternButton;
-    private ButtonWidget requireModifierButton;
-    private ButtonWidget modifierKeyButton;
-
-    /**
-     * True while the screen is waiting for the user to press a key or
-     * click a mouse button to assign it as the modifier key.
-     */
-    private boolean waitingForKey = false;
+    private ButtonWidget pickFromChatButton;
 
     public ConfigScreen(Screen parent) {
         super(Text.literal("PVP Club Easy Invite"));
@@ -100,6 +95,29 @@ public class ConfigScreen extends Screen {
         patternField.setSuggestion("{name} » {message}");
         this.addDrawableChild(patternField);
 
+        // --- "Build chat pattern from recent chat" wizard entry point ---
+        pickFromChatButton = ButtonWidget.builder(
+                Text.literal("Build chat pattern from recent chat…"),
+                button -> {
+                    if (this.client != null) {
+                        this.client.setScreen(new ChatHistoryPickerScreen(this));
+                    }
+                }
+        ).dimensions(x, startY + (int)(ROW_HEIGHT * 3.5), ROW_WIDTH, BUTTON_HEIGHT).build();
+        this.addDrawableChild(pickFromChatButton);
+
+        // --- Invite command template ---
+        commandField = new TextFieldWidget(
+                this.textRenderer,
+                x, startY + ROW_HEIGHT * 4,
+                ROW_WIDTH, BUTTON_HEIGHT,
+                Text.literal("Invite command")
+        );
+        commandField.setMaxLength(128);
+        commandField.setText(config.commandPattern);
+        commandField.setSuggestion("/p invite {name}");
+        this.addDrawableChild(commandField);
+
         // --- Auto-attach from pattern toggle ---
         autoPatternButton = ButtonWidget.builder(
                 autoPatternLabel(),
@@ -107,29 +125,8 @@ public class ConfigScreen extends Screen {
                     config.autoAttachFromPattern = !config.autoAttachFromPattern;
                     button.setMessage(autoPatternLabel());
                 }
-        ).dimensions(x, startY + ROW_HEIGHT * 4, ROW_WIDTH, BUTTON_HEIGHT).build();
-        this.addDrawableChild(autoPatternButton);
-
-        // --- Require modifier key ---
-        requireModifierButton = ButtonWidget.builder(
-                requireModifierLabel(),
-                button -> {
-                    config.requireModifierKey = !config.requireModifierKey;
-                    button.setMessage(requireModifierLabel());
-                    refreshWidgetStates();
-                }
         ).dimensions(x, startY + ROW_HEIGHT * 5, ROW_WIDTH, BUTTON_HEIGHT).build();
-        this.addDrawableChild(requireModifierButton);
-
-        // --- Modifier Key — press-to-bind, vanilla controls style ---
-        modifierKeyButton = ButtonWidget.builder(
-                modifierKeyLabel(),
-                button -> {
-                    waitingForKey = !waitingForKey;
-                    button.setMessage(modifierKeyLabel());
-                }
-        ).dimensions(x, startY + ROW_HEIGHT * 6, ROW_WIDTH, BUTTON_HEIGHT).build();
-        this.addDrawableChild(modifierKeyButton);
+        this.addDrawableChild(autoPatternButton);
 
         // --- Done / Cancel ---
         int bottomY = this.height - 30;
@@ -152,56 +149,16 @@ public class ConfigScreen extends Screen {
                     if (pat != null && !pat.isBlank()) {
                         config.chatPattern = pat;
                     }
+                    String cmd = commandField.getText();
+                    if (cmd != null && !cmd.isBlank()) {
+                        config.commandPattern = cmd;
+                    }
                     config.save();
                     close();
                 }
         ).dimensions(centerX + 4, bottomY, 150, BUTTON_HEIGHT).build());
 
         refreshWidgetStates();
-    }
-
-    // ---- Key / mouse capture while arming the modifier-key button -------
-
-    @Override
-    public boolean keyPressed(KeyInput input) {
-        if (waitingForKey) {
-            int code = input.getKeycode();
-            // Esc cancels the binding.
-            if (code == GLFW.GLFW_KEY_ESCAPE) {
-                waitingForKey = false;
-                modifierKeyButton.setMessage(modifierKeyLabel());
-                return true;
-            }
-            acceptModifierKey(code);
-            return true;
-        }
-        return super.keyPressed(input);
-    }
-
-    @Override
-    public boolean mouseClicked(Click click, boolean isClient) {
-        if (waitingForKey) {
-            // Mouse buttons come in as their GLFW button code
-            // (0 = left, 1 = right, 2 = middle, …).
-            int code = click.button();
-            // The "release" of a held click can also be reported as a
-            // mouseClicked; ignore codes that aren't real buttons.
-            if (code >= 0 && code <= 7) {
-                acceptModifierKey(code);
-                return true;
-            }
-            waitingForKey = false;
-            modifierKeyButton.setMessage(modifierKeyLabel());
-            return true;
-        }
-        return super.mouseClicked(click, isClient);
-    }
-
-    private void acceptModifierKey(int glfwCode) {
-        ModifierKey picked = ModifierKey.ofGlfwCode(glfwCode);
-        config.setModifierKey(picked);
-        waitingForKey = false;
-        modifierKeyButton.setMessage(modifierKeyLabel());
     }
 
     // ---- Widget enable / disable state -----------------------------------
@@ -217,9 +174,11 @@ public class ConfigScreen extends Screen {
         patternField.setEditable(enabled);
         patternField.active = enabled;
 
+        pickFromChatButton.active = enabled;
+        commandField.setEditable(enabled);
+        commandField.active = enabled;
+
         autoPatternButton.active = enabled;
-        requireModifierButton.active = enabled;
-        modifierKeyButton.active = enabled;
     }
 
     // ---- Navigation -------------------------------------------------------
@@ -247,17 +206,10 @@ public class ConfigScreen extends Screen {
         ctx.drawTextWithShadow(this.textRenderer, Text.literal("§7Server filter"), labelX, labelYBase + ROW_HEIGHT, 0xFFFFFF);
         ctx.drawTextWithShadow(this.textRenderer, Text.literal("§7Chat pattern (fallback for unsigned chat)"),
                 labelX, labelYBase + ROW_HEIGHT * 3, 0xFFFFFF);
+        ctx.drawTextWithShadow(this.textRenderer, Text.literal("§7Invite command"),
+                labelX, labelYBase + ROW_HEIGHT * 4, 0xFFFFFF);
         ctx.drawTextWithShadow(this.textRenderer, Text.literal("§7Trigger"), labelX,
                 labelYBase + ROW_HEIGHT * 5, 0xFFFFFF);
-
-        // While we're armed for key-capture, draw a centred prompt so
-        // the user knows what's going on even if the button is small.
-        if (waitingForKey) {
-            String prompt = "Press a key (or Esc to cancel)";
-            int promptY = this.height / 2 + 80;
-            ctx.drawCenteredTextWithShadow(this.textRenderer,
-                    Text.literal("§e" + prompt + "§r"), this.width / 2, promptY, 0xFFFFFF);
-        }
 
         super.render(ctx, mouseX, mouseY, delta);
     }
@@ -274,19 +226,6 @@ public class ConfigScreen extends Screen {
 
     private Text autoPatternLabel() {
         return Text.literal("Auto-attach from pattern: " + onOff(config.autoAttachFromPattern));
-    }
-
-    private Text requireModifierLabel() {
-        return Text.literal("Require Modifier Key: " + onOff(config.requireModifierKey));
-    }
-
-    private Text modifierKeyLabel() {
-        if (waitingForKey) {
-            return Text.literal("§eModifier Key: §6[ Press a key… ]§r");
-        }
-        ModifierKey key = config.getModifierKey();
-        String display = key.isUnbound() ? "§7[None]§r" : key.getDisplayName();
-        return Text.literal("Modifier Key: " + display);
     }
 
     private static String onOff(boolean b) {

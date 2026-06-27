@@ -27,20 +27,19 @@ Click any player name in chat to auto-/p invite them. Built for mcpvp.club.
 ### ⚔️ How it works
 
 1. **Open chat.** Notice someone talking trash in chat — they probably want a duel.
-2. **Hold the bound key and click their name.** The mod attaches the click event ahead of time, so vanilla's own click handler fires the right command.
-3. **Press `R`** to "record" the most recent chat-line's player name. The next line you see becomes a one-click invite for that player. Press `R` multiple times to stack up several names — successive clicks invite them in LIFO order.
-
-> **Why the bound-key gate?** Because clicking on a player name in chat is now always going to invite them. Requiring a held key is the "I really mean it" signal. The default state is `Unbound` — open the config screen, click the **Modifier Key** row, and press any key you want (or Esc to cancel). Same UX as Minecraft's vanilla controls menu.
+2. **Click their name.** That's it. The mod attaches the click event ahead of time, so vanilla's own click handler fires the right command when you click.
+3. **Don't want to type the chat pattern by hand?** Open the config screen (Mod Menu) and click **Build chat pattern from recent chat…** — pick a real chat line from your history, stamp each word as `{name}` / `{message}` / literal, hit Apply. No regex required.
 
 ---
 
 ### ✨ Features
 
+- **Just click, no hotkey.** No modifier key to remember, no `R` to press beforehand.
 - **Works on both signed and unsigned chat servers.** Vanilla attaches an entity hover event to player names on signed servers; on unsigned servers (mcpvp.club) the mod falls back to a user-configurable chat-line pattern.
 - **No more "type name → typo → re-type → tab-complete → enter"** — one click, you're done.
 - **Mod Menu config screen** (no Cloth Config dependency — pure vanilla UI).
-- **Vanilla-controls-style key binding.** Click the Modifier Key row, press any key (or mouse button), done. Press Esc to cancel.
-- **7 toggles**: master switch, server-only filter, server address, chat pattern, auto-attach from pattern, modifier key requirement, and modifier key (any key — including Left Control, F, K, Space, whatever you want).
+- **In-game pattern builder.** Pick a real chat line, stamp each word as `{name}` / `{message}` / literal. The 訊息 Chat Pattern and 命令 Invite Command boxes at the top of the wizard update live.
+- **5 toggles + 3 text fields**: master switch, server-only filter, server address, chat pattern, invite command, auto-attach from pattern.
 - **Persists to JSON** at `.minecraft/config/pvpclub_easyinv.json`.
 - **Server-side-safe** — only touches client state. Other players cannot tell you are using it.
 
@@ -63,7 +62,7 @@ Other common patterns (editable in Mod Menu):
 
 | Server style            | Pattern                         |
 |-------------------------|---------------------------------|
-| Vanilla / most SMP      | `<{name}> {message>`           |
+| Vanilla / most SMP      | `<{name}> {message}`           |
 | Guild / clan            | `[{name}] {message}`           |
 | `[Rank] Name: msg`     | `\[.+?\] {name}: {message}`    |
 

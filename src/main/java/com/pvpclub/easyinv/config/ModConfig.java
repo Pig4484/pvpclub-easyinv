@@ -9,8 +9,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayDeque;
-import java.util.Deque;
+import java.util.ArrayList;
 
 /**
  * Runtime-tweakable settings for the mod. Persisted to
@@ -19,12 +18,16 @@ import java.util.Deque;
  * <p>Defaults match the requirements we agreed on:
  * <ul>
  *   <li>{@code enabled = true}</li>
- *   <li>{@code serverOnly = true} (only fire on ncpvp.club by default)</li>
- *   <li>{@code requireModifierKey = true}</li>
- *   <li>{@code modifierKey = LEFT_CONTROL}</li>
+ *   <li>{@code serverOnly = true} (only fire on mcpvp.club by default)</li>
  *   <li>{@code chatPattern = "{name} » {message}"}</li>
  *   <li>{@code autoAttachFromPattern = true}</li>
  * </ul>
+ *
+ * <p><b>v1.3.0:</b> removed the {@code requireModifierKey} / {@code modifierKey}
+ * fields and the {@code recordedPlayers} stack — clicks always fire on chat
+ * lines (gated only by {@link #enabled} and the server filter), and the
+ * Record keybind (R) was removed in favour of an in-game pattern builder
+ * that is reached from the config screen.</p>
  */
 public class ModConfig {
     private static final Logger LOGGER = LoggerFactory.getLogger("pvpclub_easyinv/config");
@@ -51,18 +54,6 @@ public class ModConfig {
      */
     public String serverAddress = "mcpvp.club";
 
-    /** If true, the modifier key below must be held when clicking. */
-    public boolean requireModifierKey = true;
-
-    /**
-     * GLFW key code of the user's chosen modifier key. -1 (the value of
-     * {@link ModifierKey#UNBOUND_GLFW}) means "no key chosen yet"; the
-     * user picks one through the config screen, which then sets this
-     * field. Pre-v1.2.0 saves use a {@code String} field under the same
-     * name; see {@link #loadFromDisk()} for the legacy migration path.
-     */
-    public int modifierKey = ModifierKey.UNBOUND_GLFW;
-
     /**
      * User-defined chat-line template. Used as a fallback when the
      * vanilla {@code HoverEvent$ShowEntity} marker is missing (e.g.
@@ -80,16 +71,75 @@ public class ModConfig {
      */
     public boolean autoAttachFromPattern = true;
 
+    /**
+     * Command template sent when the user clicks a chat name. Supports
+     * two placeholders:
+     * <ul>
+     *   <li>{@code {name}} — the extracted player name (mandatory;
+     *       leave it out and the invite won't have a target)</li>
+     *   <li>{@code {message}} — the rest of the line, when the chat
+     *       pattern used a {@code {message}} group</li>
+     * </ul>
+     * Default is the mcpvp.club party-invite command.
+     */
+    public String commandPattern = "/p invite {name}";
+
     // ---- Transient (not persisted) ---------------------------------------
 
     /**
-     * Stack of player names waiting to be invited. Filled by the
-     * "Record" keybind (default {@code R}), drained by the next
-     * addMessage mixin that sees a non-empty stack — at which point a
-     * click event is attached to the new message and the name is
-     * popped.
+     * Rolling buffer of the last few chat lines seen by the mixin, in
+     * arrival order. Used by the in-game {@code ChatHistoryPickerScreen}
+     * so the user can build a chat pattern by clicking words in a real
+     * line instead of typing regex-like syntax by hand. Memory only,
+     * never persisted.
      */
-    public transient Deque<String> recordedPlayers = new ArrayDeque<>();
+    public transient java.util.List<String> recentChatLines = new ArrayList<>();
+
+    /**
+     * Maximum number of chat lines kept in {@link #recentChatLines}.
+     * Small enough that we don't grow unbounded, large enough that the
+     * user almost always sees their last few messages.
+     */
+    public static final int MAX_RECENT_CHAT_LINES = 30;
+
+    /**
+     * Push a raw chat line onto the rolling history. No-op for blank
+     * lines. Oldest entries fall off the front once the cap is hit.
+     */
+    public synchronized void captureChatLine(String raw) {
+        if (raw == null) {
+            return;
+        }
+        String trimmed = raw.trim();
+        if (trimmed.isEmpty()) {
+            return;
+        }
+        recentChatLines.add(trimmed);
+        while (recentChatLines.size() > MAX_RECENT_CHAT_LINES) {
+            recentChatLines.remove(0);
+        }
+    }
+
+    /**
+     * Convenience used by the mixin: render the {@link #commandPattern}
+     * by substituting the captured {@code name} (and optional
+     * {@code message}). Unknown placeholders are left in place so the
+     * user notices typos in the config.
+     */
+    public String renderCommand(String name, String message) {
+        if (commandPattern == null || commandPattern.isEmpty()) {
+            // Fallback: behave like the old hardcoded command.
+            return "p invite " + (name == null ? "" : name);
+        }
+        String out = commandPattern;
+        if (name != null) {
+            out = out.replace("{name}", name);
+        }
+        if (message != null) {
+            out = out.replace("{message}", message);
+        }
+        return out;
+    }
 
     // ---- Accessors --------------------------------------------------------
 
@@ -125,8 +175,11 @@ public class ModConfig {
                     if (parsed.chatPattern == null || parsed.chatPattern.isBlank()) {
                         parsed.chatPattern = "{name} » {message}";
                     }
-                    if (parsed.recordedPlayers == null) {
-                        parsed.recordedPlayers = new ArrayDeque<>();
+                    if (parsed.commandPattern == null || parsed.commandPattern.isBlank()) {
+                        parsed.commandPattern = "/p invite {name}";
+                    }
+                    if (parsed.recentChatLines == null) {
+                        parsed.recentChatLines = new ArrayList<>();
                     }
                     return parsed;
                 }
@@ -147,15 +200,6 @@ public class ModConfig {
         } catch (IOException e) {
             LOGGER.error("Failed to write pvpclub_easyinv.json", e);
         }
-    }
-
-    /** Typed view of {@link #modifierKey}. */
-    public ModifierKey getModifierKey() {
-        return ModifierKey.ofGlfwCode(modifierKey);
-    }
-
-    public void setModifierKey(ModifierKey key) {
-        this.modifierKey = key.getGlfwCode();
     }
 
     /** Typed view of {@link #chatPattern}, re-parsed each call so live edits work. */

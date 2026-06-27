@@ -17,9 +17,12 @@ You see a chat line like:
 HARMANNSINGH » duel goat
 ```
 
-…and the mod attaches a `/p invite <name>` click event to the player name
-in advance, so vanilla's own click handler fires the right command when
-you click it. Two ways the name gets attached, in priority order:
+…just **click** the player name. The mod attaches a `/p invite <name>`
+click event to the name in advance, so vanilla's own click handler
+fires the right command when you click it. No hotkeys, no record-then-click
+dance — just click.
+
+Two ways the name gets attached, in priority order:
 
 ### 1. Vanilla `HoverEvent$ShowEntity` (signed chat)
 
@@ -38,27 +41,15 @@ default `{name} » {message}`. The `{name}` placeholder becomes a regex
 capture group; the click event is attached to the **first sibling** of
 the chat line (which by Minecraft chat convention *is* the player name).
 The pattern is configurable in Mod Menu (`<{name}> {message>`,
-`[{name}] {message}`, etc.).
-
-### Bonus: "Record Last Player" keybind (`R`)
-
-Press **`R`** while a chat line is on screen and the mod will:
-
-1. Take the most recent chat line.
-2. Run the configured pattern over it.
-3. Extract the player name.
-4. Push it onto an in-memory stack.
-5. The **next** chat line that comes in gets a click event attached
-   to its entire text, set to `/p invite <recordedName>`.
-
-Press R multiple times to stack up several names — successive clicks on
-the next chat line invite them one by one (LIFO). Great for "I want to
-duel all three of these guys".
+`[{name}] {message}`, etc.) — and you don't have to type the regex
+yourself: there's a **Build chat pattern from recent chat…** wizard
+that splits a real chat line into clickable tokens and lets you stamp
+each one with `{name}` / `{message}` / literal.
 
 ## Features
 
 - **Click-to-invite** (works for both signed and unsigned chat servers)
-- **Mod Menu config screen** with six toggles + a press-to-bind key picker:
+- **Mod Menu config screen** with the essentials:
   - **Mod Enabled** — master switch (default: ON)
   - **Only on this server** — restrict to a specific server address
     (default: ON, address: `mcpvp.club`)
@@ -66,15 +57,29 @@ duel all three of these guys".
     server's address (case-insensitive)
   - **Chat Pattern** — template with `{name}` and `{message}`
     placeholders (default: `{name} » {message}`)
+  - **Build chat pattern from recent chat…** — in-game wizard. Pick a
+    real chat line from your history, click each word to stamp it as
+    `{name}` / `{message}` / literal. The result fills the Chat Pattern
+    box automatically.
+  - **Invite Command** — what the mod sends when you click a name
+    (default: `/p invite {name}`)
   - **Auto-attach from pattern** — fall back to the pattern when no
     hover event is present (default: ON)
-  - **Require Modifier Key** — gate the click behind a hotkey
-    (default: ON)
-  - **Modifier Key** — pick **any** key (default: `Unbound` — pick in
-    the config screen, vanilla-controls-style press-to-bind UI)
 - **Persists to JSON** at `.minecraft/config/pvpclub_easyinv.json`
 - **Server-side-safe** — only touches client state, can't be detected
   by other players
+
+## v1.3.0 changes
+
+- **Removed the modifier-key toggle and the `R` "record" keybind.**
+  Clicks always fire on chat lines when the mod is enabled and the
+  player is on the configured server — one less thing to remember.
+- **Redesigned the chat-pattern wizard.** The two result boxes
+  (訊息 Chat pattern and 命令 Invite command) now sit at the
+  **top** of the screen, so you see the answer before you start
+  stamping. The tag selector and chat-line tokens live below.
+- Old `requireModifierKey` / `modifierKey` JSON fields are silently
+  ignored on load — the new config schema is a strict subset.
 
 ## Project layout
 
@@ -86,18 +91,19 @@ pvpclub_easyinv/
 ├── gradle/wrapper/gradle-wrapper.properties
 └── src/main/
     ├── java/com/pvpclub/easyinv/
-    │   ├── PvpClubEasyInv.java         # entry point + R keybind
+    │   ├── PvpClubEasyInv.java         # entry point
     │   ├── config/
-    │   │   ├── ModConfig.java          # JSON-backed config + recordedPlayers stack
-    │   │   ├── ModifierKey.java        # arbitrary-key + UNBOUND state
+    │   │   ├── ModConfig.java          # JSON-backed config + recent chat lines buffer
     │   │   └── ChatPattern.java        # {name}/{message} → compiled regex
     │   ├── gui/
-    │   │   └── ConfigScreen.java       # vanilla config screen for Mod Menu
+    │   │   ├── ConfigScreen.java               # vanilla config screen for Mod Menu
+    │   │   ├── ChatHistoryPickerScreen.java    # step 1: pick a real chat line
+    │   │   └── ChatPatternBuilderScreen.java   # step 2: stamp words with {name}/{message}
     │   ├── integration/
     │   │   └── ModMenuIntegration.java # wires into Mod Menu
     │   └── mixin/client/
-    │       ├── ChatHudAccessor.java    # @Invoker for addMessage + @Accessor for messages
-    │       └── ChatHudMixin.java       # injects the ClickEvent, handles pattern + record
+    │       ├── ChatHudAccessor.java    # @Invoker for addMessage (re-invoke without recursion)
+    │       └── ChatHudMixin.java       # injects the ClickEvent, handles hover + pattern paths
     └── resources/
         ├── fabric.mod.json
         ├── pvpclub_easyinv.mixins.json
@@ -116,17 +122,14 @@ Rather than chase the new click pipeline, we take the more robust route:
 2. Before vanilla processes the line, we walk the `Text` tree.
 3. **Hover event first**: any node whose `Style` carries
    `HoverEvent$ShowEntity` is a player name — attach
-   `Style#withClickEvent(new ClickEvent$RunCommand("p invite <name>"))`.
+   `Style#withClickEvent(new ClickEvent$RunCommand(commandPattern))`.
 4. **Pattern fallback**: if no hover event is found, the user's chat
    pattern is run against the whole line's text. If a name is
    extracted, attach the click event to the **first sibling** of the
    line — by Minecraft chat convention that sibling is the player name,
    so clicking it triggers the command without touching the rest of
    the line.
-5. **Recorded-player stack**: if the user pressed `R` since the last
-   chat line, pop one name and wrap the entire line with the click
-   event (overriding any of the above, because recording is explicit).
-6. The re-invocation of `addMessage` goes through a `@Invoker` accessor
+5. The re-invocation of `addMessage` goes through a `@Invoker` accessor
    so the mixin doesn't recurse into itself.
 
 All chat rewriting rebuilds trees with **empty-string roots** so the
@@ -147,7 +150,7 @@ gradle wrapper
 The output is at:
 
 ```
-build/libs/pvpclub-easyinv-1.2.0.jar
+build/libs/pvpclub-easyinv-1.3.0.jar
 ```
 
 ## Run the dev client
@@ -176,16 +179,14 @@ Lives at `.minecraft/config/pvpclub_easyinv.json`:
   "enabled": true,
   "serverOnly": true,
   "serverAddress": "mcpvp.club",
-  "requireModifierKey": true,
-  "modifierKey": -1,
   "chatPattern": "{name} » {message}",
-  "autoAttachFromPattern": true
+  "autoAttachFromPattern": true,
+  "commandPattern": "/p invite {name}"
 }
 ```
 
-`modifierKey` is the GLFW key code as an integer; `-1` means Unbound
-(no key chosen). `recordedPlayers` is in-memory only and intentionally
-not persisted.
+`recentChatLines` (the rolling buffer used by the pattern wizard) is
+in-memory only and intentionally not persisted.
 
 ## Chat pattern syntax
 
@@ -208,16 +209,17 @@ Common patterns:
 | Guild/clan                    | `[{name}] {message}`          |
 | `[Rank] Name: msg`           | `\[.+?\] {name}: {message}`   |
 
-## Modifier key binding (vanilla controls style)
+### Don't want to type the pattern by hand?
 
-In the Mod Menu config screen, click the **Modifier Key** row once.
-The button text changes to `Press a key…` and a centred prompt appears
-above the buttons. Press **any** key — left Ctrl, F, K, a letter, whatever
-you want. The binding is set. Press **Esc** while the screen is armed
-to cancel.
+Click **Build chat pattern from recent chat…** in the config screen:
 
-The same row also accepts **mouse buttons** (left, right, middle, side
-buttons) if you really want them as a modifier. (Most people won't.)
+1. The wizard shows the last 30 chat lines the mod has seen.
+2. Pick the line that looks like a typical chat message on this server.
+3. On the next screen, the line is split into clickable word-buttons.
+4. Pick a tag at the top — **literal** / **{name}** / **{message}** —
+   then click each word to stamp it.
+5. The **訊息 Chat pattern** and **命令 Invite command** boxes at the
+   top update live. Tweak them by hand if you like, then **Apply**.
 
 ## Compatibility notes
 

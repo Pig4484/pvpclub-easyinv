@@ -1,9 +1,7 @@
 package com.pvpclub.easyinv.mixin.client;
 
-import com.pvpclub.easyinv.PvpClubEasyInv;
 import com.pvpclub.easyinv.config.ChatPattern;
 import com.pvpclub.easyinv.config.ModConfig;
-import com.pvpclub.easyinv.config.ModifierKey;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.hud.ChatHud;
 import net.minecraft.client.gui.hud.MessageIndicator;
@@ -28,7 +26,7 @@ import java.util.Optional;
  * Injects a {@code /p invite <name>} {@link ClickEvent} onto every player
  * name in every chat line that gets added to the chat hud.
  *
- * <h2>Three name sources, in priority order</h2>
+ * <h2>Two name sources, in priority order</h2>
  * <ol>
  *   <li><b>Vanilla hover event</b> — the standard
  *       {@code HoverEvent$ShowEntity} vanilla attaches to every
@@ -43,12 +41,11 @@ import java.util.Optional;
  *       the line, which is by Minecraft chat convention the
  *       player name. We deliberately do NOT wrap the whole line —
  *       see {@link #pvpclub_easyinv$replaceNode} for why.</li>
- *   <li><b>Recorded-player stack</b> — the "Record" keybind pushes
- *       names onto a stack. The next {@code addMessage} call after a
- *       record pops one name and wraps the entire line (every
- *       sibling gets the same click event) so any click on the
- *       line fires {@code /p invite} for that player.</li>
  * </ol>
+ *
+ * <p><b>v1.3.0:</b> the modifier-key gate and the recorded-player
+ * stack were removed — clicks always fire on chat lines when the
+ * mod is enabled and the player is on the configured server.</p>
  *
  * <p>All chat rewriting is done with empty-string roots to avoid
  * duplicating the concatenated sibling string when reconstructing
@@ -79,34 +76,19 @@ public abstract class ChatHudMixin {
             return;
         }
 
-        // 3. Modifier key — when "Require Modifier Key" is on AND a key
-        //    has been bound, drop messages that arrived while the user
-        //    wasn't holding it. An unbound key counts as "no gate" so
-        //    the mod still does something useful out of the box.
-        ModifierKey modKey = config.getModifierKey();
-        if (config.requireModifierKey && !modKey.isUnbound() && !modKey.isPressed()) {
-            return;
-        }
+        // 3. Capture the raw line so the in-game pattern builder has
+        //    something recent to work with. Done before any rewriting
+        //    so the picker shows the line as the user actually saw it.
+        config.captureChatLine(message.getString());
 
         // 4. Attach a click event to the player-name portion of the line.
         Text rewritten = pvpclub_easyinv$injectInviteClickEvent(message, config);
-
-        // 5. If a player is waiting on the recorded-player stack, pop one
-        //    and wrap the whole line. The wrap uses an empty-string root
-        //    so the concatenated string isn't duplicated.
-        if (!config.recordedPlayers.isEmpty()) {
-            String recorded = config.recordedPlayers.pollLast();
-            ClickEvent recordedClick = new ClickEvent.RunCommand("p invite " + recorded);
-            rewritten = pvpclub_easyinv$wrapAllNodesWithClick(rewritten, recordedClick, true);
-            PvpClubEasyInv.LOGGER.info("[{}] Recorded-player click attached: invite '{}'.",
-                    PvpClubEasyInv.MOD_ID, recorded);
-        }
 
         if (rewritten == message) {
             return; // Nothing changed; let vanilla process the line as-is.
         }
 
-        // 6. Re-invoke addMessage with the rewritten text, bypassing our
+        // 5. Re-invoke addMessage with the rewritten text, bypassing our
         //    own @Inject wrapper to avoid infinite recursion.
         ci.cancel();
         ((ChatHudAccessor) (Object) this).pvpclub_easyinv$invokeAddMessage(rewritten, signature, indicator);
@@ -166,7 +148,7 @@ public abstract class ChatHudMixin {
             return message;
         }
         String name = playerName.get();
-        ClickEvent click = new ClickEvent.RunCommand("p invite " + name);
+        ClickEvent click = new ClickEvent.RunCommand(config.renderCommand(name, null));
 
         // 1. Vanilla hover event path: replace the style of the exact node
         //    that carries the hover event so only that node is clickable.
@@ -265,63 +247,6 @@ public abstract class ChatHudMixin {
             rebuilt.append(sibling);
         }
         return rebuilt;
-    }
-
-    /**
-     * Rebuilds the entire {@link Text} tree, attaching {@code click}
-     * to every node. Used by the recorded-player path so any click
-     * anywhere on the next chat line fires {@code /p invite
-     * <recorded>}.
-     *
-     * <p>Always builds with an empty-string root to avoid the
-     * duplicated-string bug (see
-     * {@link #pvpclub_easyinv$replaceNode}).</p>
-     *
-     * @param overrideExisting if true, the click event is force-set
-     *                          on every node; if false, only nodes
-     *                          without their own click event get it.
-     */
-    @Unique
-    private static Text pvpclub_easyinv$wrapAllNodesWithClick(Text original, ClickEvent click, boolean overrideExisting) {
-        Style ownStyle = original.getStyle();
-        Style newOwnStyle;
-        if (overrideExisting || ownStyle.getClickEvent() == null) {
-            newOwnStyle = ownStyle.withClickEvent(click);
-        } else {
-            newOwnStyle = ownStyle;
-        }
-        boolean ownChanged = newOwnStyle != ownStyle;
-
-        List<Text> wrappedSiblings = null;
-        for (Text sibling : original.getSiblings()) {
-            Text wrapped = pvpclub_easyinv$wrapAllNodesWithClick(sibling, click, overrideExisting);
-            if (wrappedSiblings == null && wrapped != sibling) {
-                wrappedSiblings = new ArrayList<>();
-                for (Text orig : original.getSiblings()) {
-                    if (orig == sibling) break;
-                    wrappedSiblings.add(orig);
-                }
-            }
-            if (wrappedSiblings != null) {
-                wrappedSiblings.add(wrapped);
-            }
-        }
-
-        if (!ownChanged && wrappedSiblings == null) {
-            return original;
-        }
-        MutableText out = Text.literal("");
-        out.setStyle(newOwnStyle);
-        if (wrappedSiblings != null) {
-            for (Text s : wrappedSiblings) {
-                out.append(s);
-            }
-        } else {
-            for (Text s : original.getSiblings()) {
-                out.append(s);
-            }
-        }
-        return out;
     }
 
     // ---- Server filter ---------------------------------------------------
