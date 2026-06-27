@@ -38,6 +38,7 @@ Click any player name in chat to auto-/p invite them. Built for mcpvp.club.
 - **Works on both signed and unsigned chat servers.** Vanilla attaches an entity hover event to player names on signed servers; on unsigned servers (mcpvp.club) the mod falls back to a user-configurable chat-line pattern.
 - **No more "type name → typo → re-type → tab-complete → enter"** — one click, you're done.
 - **Mod Menu config screen** (no Cloth Config dependency — pure vanilla UI).
+- **In-game keybind to open the config screen.** `Options → Controls → PVP Club Easy Invite → Open Config Screen` — unbound by default, pick any key. Lets players without Mod Menu still edit config in-game.
 - **In-game pattern builder.** Pick a real chat line, stamp each word as `{name}` / `{message}` / literal. The 訊息 Chat Pattern and 命令 Invite Command boxes at the top of the wizard update live.
 - **5 toggles + 3 text fields**: master switch, server-only filter, server address, chat pattern, invite command, auto-attach from pattern.
 - **Persists to JSON** at `.minecraft/config/pvpclub_easyinv.json`.
@@ -49,8 +50,9 @@ Click any player name in chat to auto-/p invite them. Built for mcpvp.club.
 
 1. Install [Fabric Loader 0.18.1+](https://fabricmc.net/) and [Fabric API 0.141.3+1.21.11](https://modrinth.com/mod/fabric-api).
 2. Drop the `.jar` from this page into `.minecraft/mods/`.
-3. *(Optional)* Install [Mod Menu](https://modrinth.com/mod/modmenu) to get the in-game config screen.
+3. *(Optional)* Install [Mod Menu](https://modrinth.com/mod/modmenu) to browse the mod and edit config from a single screen.
 4. Launch Minecraft **1.21.11**, join `mcpvp.club`, click a name in chat.
+5. *(Optional)* Bind a key to **Options → Controls → PVP Club Easy Invite → Open Config Screen** so you can reach the config screen without Mod Menu.
 
 ---
 

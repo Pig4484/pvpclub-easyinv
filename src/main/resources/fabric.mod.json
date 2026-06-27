@@ -3,7 +3,7 @@
   "id": "pvpclub_easyinv",
   "version": "${version}",
   "name": "PVP Club Easy Invite",
-  "description": "Click any player name in chat to automatically send /p invite <name>. Built for mcpvp.club. Supports Mod Menu config screen.",
+  "description": "Click any player name in chat to automatically send /p invite <name>. Built for mcpvp.club. Configurable via Mod Menu or the in-game keybind (Options → Controls → PVP Club Easy Invite → Open Config Screen).",
   "authors": [
     "pvpclub-easyinv contributors"
   ],

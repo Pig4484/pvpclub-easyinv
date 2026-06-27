@@ -1,0 +1,8 @@
+# PVP Club Easy Invite — translations (English / fallback)
+#
+# Used by Minecraft's Controls screen to label the individual
+# keybinds registered in ModKeyBindings. The keybind lives under
+# the vanilla "Miscellaneous" category because Yarn mappings 1.21.11
+# freeze KeyBinding.Category to one of the built-in enum values.
+
+key.pvpclub_easyinv.open_config=PVP Club Easy Invite: Open Config Screen

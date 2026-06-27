@@ -5,9 +5,9 @@ chat to automatically send `/p invite <name>`. No more typing the command,
 no more misspelling nicknames.
 
 > **Minecraft 1.21.11** with **Fabric Loader** and **Fabric API**.
-> Mod Menu integration included — the mod shows up under
-> `Mods → PVP Club Easy Invite → Config` and exposes a vanilla-styled
-> config screen.
+> Configurable via **Mod Menu** (`Mods → PVP Club Easy Invite → Config`)
+> **or** an in-game keybind (`Options → Controls → PVP Club Easy Invite →
+> Open Config Screen`) — Mod Menu is no longer required.
 
 ## What it does
 
@@ -49,6 +49,11 @@ each one with `{name}` / `{message}` / literal.
 ## Features
 
 - **Click-to-invite** (works for both signed and unsigned chat servers)
+- **Two ways to open the config screen**:
+  - **Mod Menu** — `Mods → PVP Club Easy Invite → Config` (requires Mod Menu)
+  - **In-game keybind** — `Options → Controls → PVP Club Easy Invite →
+    Open Config Screen`. **Unbound by default** so it never clashes
+    with your existing habits; pick whatever key you like.
 - **Mod Menu config screen** with the essentials:
   - **Mod Enabled** — master switch (default: ON)
   - **Only on this server** — restrict to a specific server address
@@ -58,8 +63,8 @@ each one with `{name}` / `{message}` / literal.
   - **Chat Pattern** — template with `{name}` and `{message}`
     placeholders (default: `{name} » {message}`)
   - **Build chat pattern from recent chat…** — in-game wizard. Pick a
-    real chat line from your history, click each word to stamp it as
-    `{name}` / `{message}` / literal. The result fills the Chat Pattern
+    real chat line from your history, click each word to stamp it
+    as `{name}` / `{message}` / literal. The result fills the Chat Pattern
     box automatically.
   - **Invite Command** — what the mod sends when you click a name
     (default: `/p invite {name}`)
@@ -68,6 +73,18 @@ each one with `{name}` / `{message}` / literal.
 - **Persists to JSON** at `.minecraft/config/pvpclub_easyinv.json`
 - **Server-side-safe** — only touches client state, can't be detected
   by other players
+
+## v1.4.0 changes
+
+- **Open Config Screen keybind.** New keybind registered under the
+  `PVP Club Easy Invite` category in `Options → Controls`. Bound to
+  nothing by default so it never fires unexpectedly — pick a key
+  you like. The keybind deliberately does **not** yank you out of
+  screens that own text input (chat, anvil, sign, command block,
+  book) so you don't lose what you were typing.
+- **Mod Menu is now optional.** Players without Mod Menu can still
+  reach the config screen via the keybind, and via direct JSON edits
+  at `.minecraft/config/pvpclub_easyinv.json`.
 
 ## v1.3.0 changes
 
@@ -101,13 +118,17 @@ pvpclub_easyinv/
     │   │   └── ChatPatternBuilderScreen.java   # step 2: stamp words with {name}/{message}
     │   ├── integration/
     │   │   └── ModMenuIntegration.java # wires into Mod Menu
+    │   ├── keybind/
+    │   │   └── ModKeyBindings.java     # "Open Config Screen" keybind (v1.4.0+)
     │   └── mixin/client/
     │       ├── ChatHudAccessor.java    # @Invoker for addMessage (re-invoke without recursion)
     │       └── ChatHudMixin.java       # injects the ClickEvent, handles hover + pattern paths
     └── resources/
         ├── fabric.mod.json
         ├── pvpclub_easyinv.mixins.json
-        └── assets/pvpclub_easyinv/icon.png
+        └── assets/pvpclub_easyinv/
+            ├── icon.png
+            └── lang/en_us.lang         # keybind category & name (v1.4.0+)
 ```
 
 ## How it works
@@ -150,7 +171,7 @@ gradle wrapper
 The output is at:
 
 ```
-build/libs/pvpclub-easyinv-1.3.0.jar
+build/libs/pvpclub-easyinv-1.4.0.jar
 ```
 
 ## Run the dev client
@@ -166,9 +187,12 @@ the mod loaded. You can iterate on config screens and re-launch quickly.
 ## Install
 
 Drop the jar into your `.minecraft/mods/` folder together with
-**Fabric Loader 0.18.1+** and **Fabric API 0.141.3+1.21.11** (and
-**Mod Menu 10+** if you want the config screen). Launch the game, join
-mcpvp.club, click a name in chat — done.
+**Fabric Loader 0.18.1+** and **Fabric API 0.141.3+1.21.11**.
+**Mod Menu is no longer required** — the config screen is reachable
+via the keybind in `Options → Controls → PVP Club Easy Invite →
+Open Config Screen`. (Mod Menu is still supported if you prefer
+browsing your mods and their configs from a single screen.) Launch
+the game, join mcpvp.club, click a name in chat — done.
 
 ## Config file
 
